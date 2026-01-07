@@ -1,43 +1,73 @@
+import { geminiModel } from "./gemini-client";
 import { DesignSchema, type Design } from "./schemas";
 
 export async function runDesignPipeline(input: {
   requirementsText: string;
   constraints: Record<string, any>;
 }): Promise<Design> {
-  const draft: Design = {
-    requirements: {
-      actors: ["End User", "Admin"],
-      functional: ["Create project", "Save versions", "Generate architecture pack"],
-      nfr: ["Security", "Maintainability", "Cost awareness"],
-      assumptions: ["MVP uses modular monolith", "PostgreSQL is primary database"],
-    },
-    architecture: {
-      pattern: "Modular Monolith",
-      rationale: ["Fast MVP delivery", "Clear boundaries", "Easy to scale later"],
-      risks: ["Heavy export tasks may require background jobs later"],
-    },
-    components: [
-      { name: "Projects", responsibilities: ["CRUD", "Versioning"] },
-      { name: "AI Orchestrator", responsibilities: ["Call Gemini", "Validate JSON"] },
-      { name: "Diagrams", responsibilities: ["Generate Mermaid text"] },
-      { name: "Exports", responsibilities: ["Generate PDF/MD pack"] },
-    ],
-    dataModel: [
-      { entity: "Project", fields: [{ name: "id", type: "string" }, { name: "name", type: "string" }] },
-      { entity: "ProjectVersion", fields: [{ name: "id", type: "string" }, { name: "requirementsText", type: "text" }] },
-    ],
-    api: [
-      { method: "POST", path: "/projects", purpose: "Create project" },
-      { method: "POST", path: "/projects/:projectId/versions", purpose: "Create version" },
-      { method: "POST", path: "/projects/:projectId/versions/:versionId/generate", purpose: "Generate design JSON" },
-    ],
-    diagrams: {
-      c4Context: "placeholder",
-      c4Container: "placeholder",
-      erd: "placeholder",
-      sequence: "placeholder",
-    },
-  };
+  const prompt = `
+You are a senior software architect.
 
-  return DesignSchema.parse(draft);
+TASK:
+Generate a SYSTEM DESIGN for the following requirements.
+
+RULES (VERY IMPORTANT):
+- Output ONLY valid JSON
+- Do NOT include markdown
+- Do NOT include explanations outside JSON
+- Follow the exact JSON schema
+
+REQUIREMENTS:
+${input.requirementsText}
+
+CONSTRAINTS:
+${JSON.stringify(input.constraints)}
+
+JSON SCHEMA:
+{
+  "requirements": {
+    "actors": string[],
+    "functional": string[],
+    "nfr": string[],
+    "assumptions": string[]
+  },
+  "architecture": {
+    "pattern": string,
+    "rationale": string[],
+    "risks": string[]
+  },
+  "components": {
+    "name": string,
+    "responsibilities": string[]
+  }[],
+  "dataModel": {
+    "entity": string,
+    "fields": { "name": string, "type": string }[]
+  }[],
+  "api": {
+    "method": string,
+    "path": string,
+    "purpose": string
+  }[],
+  "diagrams": {
+    "c4Context": string,
+    "c4Container": string,
+    "erd": string,
+    "sequence": string
+  }
+}
+`;
+
+  const result = await geminiModel.generateContent(prompt);
+  const text = result.response.text();
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch (err) {
+    throw new Error("Gemini returned invalid JSON");
+  }
+
+
+  return DesignSchema.parse(parsed);
 }
