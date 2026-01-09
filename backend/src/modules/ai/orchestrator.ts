@@ -5,23 +5,20 @@ import { DesignSchema, type Design } from "./schemas";
  * Extracts JSON from a string that might contain markdown code blocks or extra text
  */
 function extractJson(text: string): string {
-  // Remove markdown code blocks if present
-  let cleaned = text.trim();
+  // 1. Remove markdown code blocks if they wrap the entire content
+  // We match generic ``` blocks, but we only unwrap if it looks like the whole thing is wrapped
+  const codeBlockMatch = text.match(/^\s*```(?:json)?\s*([\s\S]*?)```\s*$/);
+  let cleaned = codeBlockMatch && codeBlockMatch[1] ? codeBlockMatch[1] : text;
 
-
-  const codeBlockMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (codeBlockMatch && codeBlockMatch[1]) {
-    cleaned = codeBlockMatch[1].trim();
-  }
-
-
+  // 2. Find the first '{' and the last '}'
   const firstBrace = cleaned.indexOf('{');
   const lastBrace = cleaned.lastIndexOf('}');
 
   if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-    cleaned = cleaned.substring(firstBrace, lastBrace + 1);
+    return cleaned.substring(firstBrace, lastBrace + 1);
   }
 
+  // Fallback: return original text (will likely fail parsing, but we tried)
   return cleaned;
 }
 
@@ -53,8 +50,8 @@ REQUIRED JSON STRUCTURE (follow exactly):
   },
   "architecture": {
     "pattern": "architecture pattern name (e.g., Microservices, Monolith, Event-Driven)",
-    "rationale": ["reasons for choosing this pattern"],
-    "risks": ["potential risks and mitigation strategies"]
+    "rationale": ["string array explaining reasons"],
+    "risks": ["string array describing risks and mitigation strategies"]
   },
   "components": [
     { "name": "ComponentName", "responsibilities": ["what this component does"] }
@@ -81,9 +78,25 @@ NOW GENERATE THE JSON:`;
   // Clean and extract JSON
   const cleanedText = extractJson(rawText);
 
-  let parsed: unknown;
+  let parsed: any;
   try {
     parsed = JSON.parse(cleanedText);
+
+    // HELPER: Auto-fix array of objects -> array of strings for strict schema fields
+    // This handles cases where the AI is too "smart" and returns objects instead of strings
+    const stringifyItems = (items: any[]) => {
+      if (!Array.isArray(items)) return items;
+      return items.map(item => (typeof item === 'object' ? JSON.stringify(item) : String(item)));
+    };
+
+    if (parsed.architecture) {
+      if (parsed.architecture.risks) {
+        parsed.architecture.risks = stringifyItems(parsed.architecture.risks);
+      }
+      if (parsed.architecture.rationale) {
+        parsed.architecture.rationale = stringifyItems(parsed.architecture.rationale);
+      }
+    }
   } catch (err) {
     console.error("Raw Gemini response:", rawText);
     console.error("Cleaned text:", cleanedText);
