@@ -44,10 +44,10 @@ export interface Design {
         purpose: string;
     }>;
     diagrams: {
-        c4Context: string;
-        c4Container: string;
-        erd: string;
-        sequence: string;
+        c4Context: { nodes: any[]; edges: any[] };
+        c4Container: { nodes: any[]; edges: any[] };
+        erd: { nodes: any[]; edges: any[] };
+        sequence: { nodes: any[]; edges: any[] };
     };
 }
 

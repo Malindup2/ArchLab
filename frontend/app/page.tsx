@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Sidebar, Header } from '@/components/layout';
-import { ChatInput, DiagramCanvas, OverviewTab, ComponentsTab, DataModelTab, ApiTab, DocumentationTab } from '@/components/features';
+import { ChatInput, InteractiveDiagram, OverviewTab, ComponentsTab, DataModelTab, ApiTab, DocumentationTab } from '@/components/features';
 import { generateMarkdown } from '@/lib/markdown-generator';
 import { Button, Modal, Input } from '@/components/ui';
 import { api, Project, ProjectVersion, Design } from '@/lib/api';
@@ -252,7 +252,6 @@ export default function Home() {
                   <div className="flex items-center gap-1 mb-4 border-b border-[var(--border)] pb-2">
                     {diagramTabs.map((tab) => {
                       const Icon = tab.icon;
-                      // Active if exact match
                       const isActive = activeView === tab.id;
                       return (
                         <button
@@ -267,11 +266,17 @@ export default function Home() {
                     })}
                   </div>
 
-                  <div className="flex-1 border border-[var(--border)] rounded-[var(--radius-lg)] overflow-hidden bg-[var(--surface-elevated)] shadow-sm">
-                    <DiagramCanvas
-                      diagram={design.diagrams?.[activeView as keyof typeof design.diagrams] || ''}
-                      diagramType={activeView as any}
-                    />
+                  <div className="flex-1 overflow-hidden shadow-sm">
+                    {design.diagrams?.[activeView as keyof typeof design.diagrams] ? (
+                      <InteractiveDiagram
+                        data={design.diagrams[activeView as keyof typeof design.diagrams] as any}
+                        title={diagramTabs.find(t => t.id === activeView)?.label}
+                      />
+                    ) : (
+                      <div className="flex items-center justify-center h-full text-[var(--text-tertiary)]">
+                        No diagram data available
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

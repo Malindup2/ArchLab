@@ -14,6 +14,7 @@ interface MermaidDiagramProps {
 // Initialize mermaid with dark theme
 mermaid.initialize({
     startOnLoad: false,
+    securityLevel: 'loose',
     theme: 'dark',
     themeVariables: {
         primaryColor: '#8b5cf6',

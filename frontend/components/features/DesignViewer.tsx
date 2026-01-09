@@ -3,7 +3,8 @@
 import { motion } from 'framer-motion';
 import { Design } from '@/lib/api';
 import { Card, CardContent, CardHeader } from '../ui';
-import { MermaidDiagram } from './MermaidDiagram';
+// import { MermaidDiagram } from './MermaidDiagram';
+import { InteractiveDiagram } from './InteractiveDiagram';
 import {
     Users,
     CheckSquare,
@@ -335,12 +336,14 @@ export function ApiTab({ api }: { api: Design['api'] }) {
     );
 }
 
-export function DiagramsTab({ diagrams }: { diagrams: Design['diagrams'] }) {
+export function DiagramsTab({ diagrams }: { diagrams: any }) {
+    // Note: Cast to 'any' temporarily or update your 'Design' type in api.ts
+
     const diagramList = [
         { key: 'c4Context', title: 'C4 Context Diagram', icon: <Network size={16} /> },
         { key: 'c4Container', title: 'C4 Container Diagram', icon: <Box size={16} /> },
         { key: 'erd', title: 'Entity Relationship Diagram', icon: <Database size={16} /> },
-        { key: 'sequence', title: 'Sequence Diagram', icon: <FileCode size={16} /> },
+        { key: 'sequence', title: 'Component Interaction Map', icon: <FileCode size={16} /> },
     ];
 
     return (
@@ -348,16 +351,23 @@ export function DiagramsTab({ diagrams }: { diagrams: Design['diagrams'] }) {
             variants={containerVariants}
             initial="hidden"
             animate="visible"
-            className="space-y-6"
+            className="space-y-8" // Increased spacing for better view
         >
-            {diagramList.map(({ key, title, icon }) => (
-                <motion.div key={key} variants={itemVariants}>
-                    <MermaidDiagram
-                        chart={diagrams[key as keyof typeof diagrams]}
-                        title={title}
-                    />
-                </motion.div>
-            ))}
+            {diagramList.map(({ key, title }) => {
+                const data = diagrams[key];
+
+                // Safety check: ensure data exists before rendering
+                if (!data || !data.nodes) return null;
+
+                return (
+                    <motion.div key={key} variants={itemVariants}>
+                        <InteractiveDiagram
+                            data={data}
+                            title={title}
+                        />
+                    </motion.div>
+                );
+            })}
         </motion.div>
     );
 }

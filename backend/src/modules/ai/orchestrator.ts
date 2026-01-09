@@ -29,10 +29,13 @@ export async function runDesignPipeline(input: {
   const prompt = `You are a senior software architect. Generate a SYSTEM DESIGN as JSON.
 
 CRITICAL RULES:
-1. Return ONLY valid JSON - no markdown, no explanations, no code blocks
-2. Do NOT wrap response in \`\`\` or \`\`\`json
-3. Start your response with { and end with }
-4. If you cannot generate a complete design, return: {}
+1. Return ONLY valid JSON - no markdown, no explanations.
+2. Arrays of strings (like 'risks') must contain simple STRINGS, not objects.
+3. FOR DIAGRAMS (React Flow Structure):
+   - Return "nodes" and "edges" arrays for each diagram.
+   - Nodes must have: { id: "string", type: "default" | "table", label: "string", details?: string[] }
+   - Edges must have: { id: "string", source: "nodeId", target: "nodeId", label?: "string" }
+   - For ERD and Class diagrams, use type: "table" and provide field list in "details".
 
 REQUIREMENTS:
 ${input.requirementsText}
@@ -63,10 +66,10 @@ REQUIRED JSON STRUCTURE (follow exactly):
     { "method": "GET/POST/PUT/DELETE", "path": "/api/resource", "purpose": "what this endpoint does" }
   ],
   "diagrams": {
-    "c4Context": "Mermaid diagram code for C4 Context",
-    "c4Container": "Mermaid diagram code for C4 Container",
-    "erd": "Mermaid diagram code for ERD",
-    "sequence": "Mermaid diagram code for sequence diagram"
+    "c4Context": { "nodes": [], "edges": [] },
+    "c4Container": { "nodes": [], "edges": [] },
+    "erd": { "nodes": [], "edges": [] },
+    "sequence": { "nodes": [], "edges": [] }
   }
 }
 
@@ -83,7 +86,6 @@ NOW GENERATE THE JSON:`;
     parsed = JSON.parse(cleanedText);
 
     // HELPER: Auto-fix array of objects -> array of strings for strict schema fields
-    // This handles cases where the AI is too "smart" and returns objects instead of strings
     const stringifyItems = (items: any[]) => {
       if (!Array.isArray(items)) return items;
       return items.map(item => (typeof item === 'object' ? JSON.stringify(item) : String(item)));
@@ -97,6 +99,7 @@ NOW GENERATE THE JSON:`;
         parsed.architecture.rationale = stringifyItems(parsed.architecture.rationale);
       }
     }
+    // Note: Mermaid strip helper removed as we now expect JSON objects for diagrams
   } catch (err) {
     console.error("Raw Gemini response:", rawText);
     console.error("Cleaned text:", cleanedText);

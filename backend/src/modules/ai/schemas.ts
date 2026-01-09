@@ -16,10 +16,10 @@ export const DesignSchema = z.object({
   dataModel: z.array(z.object({ entity: z.string(), fields: z.array(z.object({ name: z.string(), type: z.string() })) })),
   api: z.array(z.object({ method: z.string(), path: z.string(), purpose: z.string() })),
   diagrams: z.object({
-    c4Context: z.string(),
-    c4Container: z.string(),
-    erd: z.string(),
-    sequence: z.string(),
+    c4Context: z.object({ nodes: z.array(z.any()), edges: z.array(z.any()) }),
+    c4Container: z.object({ nodes: z.array(z.any()), edges: z.array(z.any()) }),
+    erd: z.object({ nodes: z.array(z.any()), edges: z.array(z.any()) }),
+    sequence: z.object({ nodes: z.array(z.any()), edges: z.array(z.any()) }),
   }),
 });
 export type Design = z.infer<typeof DesignSchema>;
