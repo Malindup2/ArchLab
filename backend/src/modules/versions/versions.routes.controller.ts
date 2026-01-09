@@ -12,6 +12,10 @@ const CreateVersionSchema = z.object({
 export const createVersion = asyncHandler(async (req, res) => {
   const { projectId } = req.params;
 
+  if (!projectId) {
+    throw new HttpError(400, "Project ID is required");
+  }
+
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) throw new HttpError(404, "Project not found");
 

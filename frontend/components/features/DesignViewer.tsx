@@ -35,7 +35,7 @@ const tabs: { id: TabId; label: string; icon: React.ReactNode }[] = [
     { id: 'diagrams', label: 'Diagrams', icon: <Workflow size={16} /> },
 ];
 
-const containerVariants = {
+export const containerVariants = {
     hidden: { opacity: 0 },
     visible: {
         opacity: 1,
@@ -45,7 +45,7 @@ const containerVariants = {
     },
 };
 
-const itemVariants = {
+export const itemVariants = {
     hidden: { opacity: 0, y: 10 },
     visible: { opacity: 1, y: 0 },
 };
@@ -93,7 +93,7 @@ export function DesignViewer({ design, versionNumber }: DesignViewerProps) {
     );
 }
 
-function OverviewTab({ design }: { design: Design }) {
+export function OverviewTab({ design }: { design: Design }) {
     return (
         <motion.div
             variants={containerVariants}
@@ -228,7 +228,7 @@ function OverviewTab({ design }: { design: Design }) {
     );
 }
 
-function ComponentsTab({ components }: { components: Design['components'] }) {
+export function ComponentsTab({ components }: { components: Design['components'] }) {
     return (
         <motion.div
             variants={containerVariants}
@@ -262,7 +262,7 @@ function ComponentsTab({ components }: { components: Design['components'] }) {
     );
 }
 
-function DataModelTab({ dataModel }: { dataModel: Design['dataModel'] }) {
+export function DataModelTab({ dataModel }: { dataModel: Design['dataModel'] }) {
     return (
         <motion.div
             variants={containerVariants}
@@ -300,7 +300,7 @@ function DataModelTab({ dataModel }: { dataModel: Design['dataModel'] }) {
     );
 }
 
-function ApiTab({ api }: { api: Design['api'] }) {
+export function ApiTab({ api }: { api: Design['api'] }) {
     const methodColors: Record<string, string> = {
         GET: 'bg-green-500/20 text-green-400',
         POST: 'bg-blue-500/20 text-blue-400',
@@ -335,7 +335,7 @@ function ApiTab({ api }: { api: Design['api'] }) {
     );
 }
 
-function DiagramsTab({ diagrams }: { diagrams: Design['diagrams'] }) {
+export function DiagramsTab({ diagrams }: { diagrams: Design['diagrams'] }) {
     const diagramList = [
         { key: 'c4Context', title: 'C4 Context Diagram', icon: <Network size={16} /> },
         { key: 'c4Container', title: 'C4 Container Diagram', icon: <Box size={16} /> },

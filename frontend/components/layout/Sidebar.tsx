@@ -17,34 +17,50 @@ import {
 
 interface SidebarProps {
     projectName?: string;
+    activeView: string;
+    onNavigate: (viewId: string) => void;
     onNewProject?: () => void;
+    onProjectClick?: () => void;
 }
 
 const navItems = [
-    { id: 'overview', label: 'Overview', icon: LayoutDashboard, href: '' },
+    { id: 'overview', label: 'Overview', icon: LayoutDashboard },
     {
-        id: 'diagrams', label: 'Diagrams', icon: Network, href: '/diagrams', children: [
-            { id: 'c4-context', label: 'C4 Context', href: '/diagrams/c4-context' },
-            { id: 'c4-container', label: 'C4 Container', href: '/diagrams/c4-container' },
-            { id: 'erd', label: 'ERD', href: '/diagrams/erd' },
-            { id: 'sequence', label: 'Sequence', href: '/diagrams/sequence' },
+        id: 'diagrams', label: 'Diagrams', icon: Network, children: [
+            { id: 'c4Context', label: 'C4 Context' },
+            { id: 'c4Container', label: 'C4 Container' },
+            { id: 'erd', label: 'ERD' },
+            { id: 'sequence', label: 'Sequence' },
         ]
     },
-    { id: 'components', label: 'Components', icon: Box, href: '/components' },
-    { id: 'data-model', label: 'Data Model', icon: Database, href: '/data-model' },
-    { id: 'api', label: 'API Spec', icon: Code, href: '/api' },
-    { id: 'docs', label: 'Documentation', icon: FileText, href: '/docs' },
-    { id: 'versions', label: 'Versions', icon: GitBranch, href: '/versions' },
+    { id: 'components', label: 'Components', icon: Box },
+    { id: 'dataModel', label: 'Data Model', icon: Database },
+    { id: 'api', label: 'API Spec', icon: Code },
+    { id: 'docs', label: 'Documentation', icon: FileText },
+    { id: 'versions', label: 'Versions', icon: GitBranch },
 ];
 
-export function Sidebar({ projectName, onNewProject }: SidebarProps) {
-    const pathname = usePathname();
+export function Sidebar({ projectName, activeView, onNavigate, onNewProject, onProjectClick }: SidebarProps) {
+    // Determine if a parent item should be highlighted
+    const isParentActive = (item: typeof navItems[0]) => {
+        if (item.id === activeView) return true;
+        if (item.children) {
+            return item.children.some(child => child.id === activeView);
+        }
+        // Also highlight 'diagrams' if any specific diagram type is selected but activeView might be generic 'diagrams'
+        if (item.id === 'diagrams' && ['c4Context', 'c4Container', 'erd', 'sequence'].includes(activeView)) return true;
+        return false;
+    };
 
     return (
         <aside className="workspace-sidebar bg-[var(--sidebar-bg)] border-r border-[var(--border)] flex flex-col overflow-hidden">
             {/* Project Selector */}
             <div className="p-3 border-b border-[var(--border)]">
-                <button className="w-full flex items-center justify-between px-3 py-2 rounded-[var(--radius-md)] hover:bg-[var(--sidebar-hover)] transition-colors text-left group">
+                <button
+                    type="button"
+                    onClick={onProjectClick}
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-[var(--radius-md)] hover:bg-[var(--sidebar-hover)] transition-colors text-left group"
+                >
                     <div className="flex items-center gap-2 min-w-0">
                         <div className="w-6 h-6 rounded-[var(--radius-sm)] bg-[var(--accent)] flex items-center justify-center flex-shrink-0">
                             <span className="text-white text-xs font-bold">
@@ -63,12 +79,13 @@ export function Sidebar({ projectName, onNewProject }: SidebarProps) {
             <nav className="flex-1 overflow-y-auto p-2">
                 <ul className="space-y-0.5">
                     {navItems.map((item) => {
-                        const isActive = pathname?.includes(item.id) || (item.id === 'overview' && pathname?.endsWith('/workspace'));
+                        const isActive = isParentActive(item);
                         const Icon = item.icon;
 
                         return (
                             <li key={item.id}>
                                 <button
+                                    onClick={() => onNavigate(item.id)}
                                     className={`
                     w-full flex items-center gap-2.5 px-3 py-2 rounded-[var(--radius-md)]
                     text-sm font-medium transition-colors
@@ -83,15 +100,22 @@ export function Sidebar({ projectName, onNewProject }: SidebarProps) {
                                 </button>
 
                                 {/* Sub-items for Diagrams */}
-                                {item.children && (
+                                {item.id === 'diagrams' && (isActive || activeView === 'diagrams') && (
                                     <ul className="ml-7 mt-0.5 space-y-0.5">
-                                        {item.children.map((child) => (
+                                        {item.children?.map((child) => (
                                             <li key={child.id}>
                                                 <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        onNavigate(child.id);
+                                                    }}
                                                     className={`
                             w-full text-left px-3 py-1.5 rounded-[var(--radius-sm)]
                             text-xs font-medium transition-colors
-                            text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--sidebar-hover)]
+                            ${activeView === child.id
+                                                            ? 'text-[var(--accent)] bg-[var(--sidebar-active)]'
+                                                            : 'text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--sidebar-hover)]'
+                                                        }
                           `}
                                                 >
                                                     {child.label}
