@@ -13,6 +13,7 @@ import {
     Settings,
     Plus,
     ChevronDown,
+    Terminal,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -36,6 +37,7 @@ const navItems = [
     { id: 'components', label: 'Components', icon: Box },
     { id: 'dataModel', label: 'Data Model', icon: Database },
     { id: 'api', label: 'API Spec', icon: Code },
+    { id: 'code', label: 'Code', icon: Terminal },
     { id: 'docs', label: 'Documentation', icon: FileText },
     { id: 'versions', label: 'Versions', icon: GitBranch },
 ];

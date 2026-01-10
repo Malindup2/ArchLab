@@ -12,6 +12,12 @@ export const DesignSchema = z.object({
     rationale: z.array(z.string()),
     risks: z.array(z.string()),
   }),
+  techStack: z.object({
+    frontend: z.enum(['Next.js', 'React', 'Vue', 'Angular', 'None']),
+    backend: z.enum(['Node.js', 'Python', 'Go', 'Java', 'None']),
+    database: z.enum(['PostgreSQL', 'MongoDB', 'MySQL', 'Redis', 'None']),
+    infrastructure: z.array(z.string()),
+  }),
   components: z.array(z.object({ name: z.string(), responsibilities: z.array(z.string()) })),
   dataModel: z.array(z.object({ entity: z.string(), fields: z.array(z.object({ name: z.string(), type: z.string() })) })),
   api: z.array(z.object({ method: z.string(), path: z.string(), purpose: z.string() })),

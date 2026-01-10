@@ -158,6 +158,15 @@ class ApiClient {
             }
         );
     }
+
+    // Code Gen
+    async getCode(projectId: string, versionId: string): Promise<Record<string, string>> {
+        return this.request<Record<string, string>>(`/projects/${projectId}/versions/${versionId}/code`);
+    }
+
+    getDownloadUrl(projectId: string, versionId: string): string {
+        return `${this.baseUrl}/projects/${projectId}/versions/${versionId}/download`;
+    }
 }
 
 export interface ArchitectureTemplate {

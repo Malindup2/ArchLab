@@ -56,6 +56,12 @@ REQUIRED JSON STRUCTURE (follow exactly):
     "rationale": ["string array explaining reasons"],
     "risks": ["string array describing risks and mitigation strategies"]
   },
+  "techStack": {
+    "frontend": "Next.js | React | Vue | Angular | None",
+    "backend": "Node.js | Python | Go | Java | None",
+    "database": "PostgreSQL | MongoDB | MySQL | Redis | None",
+    "infrastructure": ["string array e.g. Docker, Kubernetes"]
+  },
   "components": [
     { "name": "ComponentName", "responsibilities": ["what this component does"] }
   ],
@@ -150,8 +156,9 @@ INSTRUCTIONS:
 2. Apply the changes to the relevant sections (architecture, components, dataModel, api, diagrams)
 3. Update diagrams to reflect any architectural changes
 4. Add new components/entities/endpoints as needed
-5. Keep all unaffected parts exactly as they are
-6. Return the COMPLETE updated design
+5. Ensure 'techStack' is present and consistent with the design
+6. Keep all unaffected parts exactly as they are
+7. Return the COMPLETE updated design
 
 NOW RETURN THE UPDATED JSON:`;
 
