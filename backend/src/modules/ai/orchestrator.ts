@@ -56,6 +56,12 @@ REQUIRED JSON STRUCTURE (follow exactly):
     "rationale": ["string array explaining reasons"],
     "risks": ["string array describing risks and mitigation strategies"]
   },
+  "techStack": {
+    "frontend": "Next.js | React | Vue | Angular | None",
+    "backend": "Node.js | Python | Go | Java | None",
+    "database": "PostgreSQL | MongoDB | MySQL | Redis | None",
+    "infrastructure": ["string array e.g. Docker, Kubernetes"]
+  },
   "components": [
     { "name": "ComponentName", "responsibilities": ["what this component does"] }
   ],
@@ -98,6 +104,23 @@ NOW GENERATE THE JSON:`;
       if (parsed.architecture.rationale) {
         parsed.architecture.rationale = stringifyItems(parsed.architecture.rationale);
       }
+    }
+
+    // HELPER: Normalize techStack if AI returns array instead of object
+    if (Array.isArray(parsed.techStack)) {
+      parsed.techStack = {
+        frontend: 'None',
+        backend: 'None',
+        database: 'None',
+        infrastructure: parsed.techStack.filter((t: string) => typeof t === 'string')
+      };
+    } else if (!parsed.techStack || typeof parsed.techStack !== 'object') {
+      parsed.techStack = {
+        frontend: 'None',
+        backend: 'None',
+        database: 'None',
+        infrastructure: []
+      };
     }
     // Note: Mermaid strip helper removed as we now expect JSON objects for diagrams
   } catch (err) {
@@ -150,8 +173,9 @@ INSTRUCTIONS:
 2. Apply the changes to the relevant sections (architecture, components, dataModel, api, diagrams)
 3. Update diagrams to reflect any architectural changes
 4. Add new components/entities/endpoints as needed
-5. Keep all unaffected parts exactly as they are
-6. Return the COMPLETE updated design
+5. Ensure 'techStack' is present and consistent with the design
+6. Keep all unaffected parts exactly as they are
+7. Return the COMPLETE updated design
 
 NOW RETURN THE UPDATED JSON:`;
 
@@ -178,6 +202,25 @@ NOW RETURN THE UPDATED JSON:`;
       if (parsed.architecture.rationale) {
         parsed.architecture.rationale = stringifyItems(parsed.architecture.rationale);
       }
+    }
+
+    // HELPER: Normalize techStack if AI returns array instead of object
+    if (Array.isArray(parsed.techStack)) {
+      // Convert array like ["Next.js", "Node.js"] to default object
+      parsed.techStack = {
+        frontend: 'None',
+        backend: 'None',
+        database: 'None',
+        infrastructure: parsed.techStack.filter((t: string) => typeof t === 'string')
+      };
+    } else if (!parsed.techStack || typeof parsed.techStack !== 'object') {
+      // Provide default if missing
+      parsed.techStack = {
+        frontend: 'None',
+        backend: 'None',
+        database: 'None',
+        infrastructure: []
+      };
     }
   } catch (err) {
     console.error("Raw Gemini response:", rawText);

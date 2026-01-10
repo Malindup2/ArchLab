@@ -2,13 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import { Sidebar, Header } from '@/components/layout';
-import { ChatInput, InteractiveDiagram, OverviewTab, ComponentsTab, DataModelTab, ApiTab, DocumentationTab, TemplateSelector, Template } from '@/components/features';
+import { ChatInput, InteractiveDiagram, OverviewTab, ComponentsTab, DataModelTab, ApiTab, DocumentationTab, TemplateSelector, Template, CodeHub } from '@/components/features';
 import { generateMarkdown } from '@/lib/markdown-generator';
 import { Button, Modal, Input } from '@/components/ui';
 import { api, Project, ProjectVersion, Design, ArchitectureTemplate } from '@/lib/api';
 import { Network, Box, Database, FileCode, Loader2, Plus, FolderOpen, Layers, FileText, GitBranch } from 'lucide-react';
 
-type ViewType = 'overview' | 'components' | 'dataModel' | 'api' | 'docs' | 'versions' | 'diagrams' | 'c4Context' | 'c4Container' | 'erd' | 'sequence';
+type ViewType = 'overview' | 'components' | 'dataModel' | 'api' | 'code' | 'docs' | 'versions' | 'diagrams' | 'c4Context' | 'c4Container' | 'erd' | 'sequence';
 
 const diagramTabs = [
   { id: 'c4Context', label: 'C4 Context', icon: Network },
@@ -376,6 +376,13 @@ export default function Home() {
                     <p className="text-[var(--text-secondary)]">Endpoints, methods, and descriptions.</p>
                   </div>
                   <ApiTab api={design.api} />
+                </div>
+              )}
+
+              {/* Code View */}
+              {activeView === 'code' && selectedProject && currentVersion && (
+                <div className="h-full flex flex-col">
+                  <CodeHub projectId={selectedProject.id} versionId={currentVersion.id} />
                 </div>
               )}
 

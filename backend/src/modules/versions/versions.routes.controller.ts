@@ -204,4 +204,62 @@ export const refineDesign = asyncHandler(async (req, res) => {
   res.json(updated);
 });
 
+/**
+ * GET /projects/:projectId/versions/:versionId/code
+ * Returns the generated file structure for preview
+ */
+export const getCode = asyncHandler(async (req, res) => {
+  const { projectId, versionId } = req.params;
+
+  const version = await prisma.projectVersion.findFirst({
+    where: { id: versionId, projectId },
+    include: { project: { select: { name: true } } }
+  });
+
+  if (!version) throw new HttpError(404, "Version not found");
+  if (!version.designJson) throw new HttpError(404, "Design not generated yet");
+
+  const { generateCode } = await import("../codegen/generator");
+
+  const files = generateCode(version.designJson as any, {
+    projectName: version.project.name
+  });
+  res.json(files);
+});
+
+/**
+ * GET /projects/:projectId/versions/:versionId/download
+ * Downloads the generated code as a ZIP file
+ */
+export const downloadCode = asyncHandler(async (req, res) => {
+  const { projectId, versionId } = req.params;
+
+  const version = await prisma.projectVersion.findFirst({
+    where: { id: versionId, projectId },
+    include: { project: { select: { name: true } } }
+  });
+
+  if (!version) throw new HttpError(404, "Version not found");
+  if (!version.designJson) throw new HttpError(404, "Design not generated yet");
+
+  const { generateCode } = await import("../codegen/generator");
+  const archiver = (await import("archiver")).default;
+
+  const projectSlug = version.project.name.toLowerCase().replace(/\s+/g, '-');
+  const files = generateCode(version.designJson as any, {
+    projectName: version.project.name
+  });
+
+  res.attachment(`${projectSlug}-code.zip`);
+  const archive = archiver('zip', { zlib: { level: 9 } });
+
+  archive.pipe(res);
+
+  Object.entries(files).forEach(([path, content]) => {
+    archive.append(content, { name: path });
+  });
+
+  await archive.finalize();
+});
+
 
