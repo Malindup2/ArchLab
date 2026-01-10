@@ -4,80 +4,134 @@ export interface FileStructure {
     [path: string]: string;
 }
 
+export interface GenerateOptions {
+    projectName?: string;
+}
+
 /**
  * Generates a complete project file structure based on the system design.
  */
-export function generateCode(design: Design): FileStructure {
+export function generateCode(design: Design, options: GenerateOptions = {}): FileStructure {
     const files: FileStructure = {};
     const { techStack } = design;
+    const projectName = options.projectName || deriveProjectName(design);
 
     // 1. Root Configuration
-    files['package.json'] = generatePackageJson(design);
-    files['README.md'] = generateReadme(design);
+    files['package.json'] = generatePackageJson(design, projectName);
+    files['README.md'] = generateReadme(design, projectName);
     files['.gitignore'] = generateGitIgnore();
     files['docker-compose.yml'] = generateDockerCompose(design);
+    files['.env.example'] = generateEnvExample(design);
 
     // 2. Source Code
-    // Basic structure
     files['src/index.ts'] = generateEntrypoint(design);
 
     // Database Configuration
-    if (techStack?.database === 'PostgreSQL') {
+    if (hasDatabase(techStack, 'PostgreSQL')) {
         files['prisma/schema.prisma'] = generatePrismaSchema(design);
+    } else if (hasDatabase(techStack, 'MongoDB')) {
+        files['src/db/mongoose.ts'] = generateMongooseConnection();
+        design.dataModel?.forEach(model => {
+            files[`src/models/${model.entity.toLowerCase()}.model.ts`] = generateMongooseModel(model);
+        });
     }
 
     // API Routes
-    if (design.api) {
-        if (techStack?.frontend === 'Next.js' && !techStack.backend) {
-            // Next.js API Routes (if no separate backend)
-            // design.api.forEach(...)
-        } else {
-            // Express/Node routes
-            files['src/routes.ts'] = generateExpressRoutes(design);
-        }
+    if (design.api && design.api.length > 0) {
+        files['src/routes/index.ts'] = generateExpressRoutes(design);
+
+        // Generate individual route files per resource
+        const resources = extractResources(design.api);
+        resources.forEach(resource => {
+            const endpoints = design.api.filter(e => e.path.includes(`/${resource}`));
+            if (endpoints.length > 0) {
+                files[`src/routes/${resource}.routes.ts`] = generateResourceRoutes(resource, endpoints);
+            }
+        });
     }
+
+    // TypeScript config
+    files['tsconfig.json'] = generateTsConfig();
 
     return files;
 }
 
-function generatePackageJson(design: Design): string {
+// Helper to derive project name from design
+function deriveProjectName(design: Design): string {
+    // Try to extract from architecture pattern or first component
+    const pattern = design.architecture?.pattern?.toLowerCase().replace(/\s+/g, '-') || 'my-project';
+    return pattern.includes('system') ? pattern : `${pattern}-app`;
+}
+
+// Check if techStack has a specific value (not 'None')
+function hasDatabase(techStack: Design['techStack'], db: string): boolean {
+    return techStack?.database === db;
+}
+
+function hasBackend(techStack: Design['techStack'], framework: string): boolean {
+    return techStack?.backend === framework || techStack?.backend === 'Node.js';
+}
+
+function generatePackageJson(design: Design, projectName: string): string {
     const { techStack } = design;
 
     const deps: Record<string, string> = {
-        "dotenv": "^16.0.0",
+        "dotenv": "^16.4.0",
     };
     const devDeps: Record<string, string> = {
-        "typescript": "^5.0.0",
-        "@types/node": "^20.0.0",
-        "ts-node": "^10.9.0",
-        "nodemon": "^3.0.0"
+        "typescript": "^5.3.0",
+        "@types/node": "^20.10.0",
+        "ts-node": "^10.9.2",
+        "tsx": "^4.7.0",
+        "nodemon": "^3.0.2"
     };
 
-    // Add backend deps
-    if (techStack?.backend === 'Node.js') {
-        deps["express"] = "^4.18.0";
+    // Add backend deps - default to Express for Node.js
+    if (techStack?.backend === 'Node.js' || techStack?.backend !== 'None') {
+        deps["express"] = "^4.18.2";
         deps["cors"] = "^2.8.5";
-        devDeps["@types/express"] = "^4.17.0";
-        devDeps["@types/cors"] = "^2.8.5";
+        deps["helmet"] = "^7.1.0";
+        devDeps["@types/express"] = "^4.17.21";
+        devDeps["@types/cors"] = "^2.8.17";
     }
 
     // Add database deps
-    if (techStack?.database === 'PostgreSQL') {
-        deps["@prisma/client"] = "^5.0.0";
-        devDeps["prisma"] = "^5.0.0";
-    } else if (techStack?.database === 'MongoDB') {
-        deps["mongoose"] = "^7.0.0";
+    if (hasDatabase(techStack, 'PostgreSQL')) {
+        deps["@prisma/client"] = "^5.8.0";
+        devDeps["prisma"] = "^5.8.0";
+    } else if (hasDatabase(techStack, 'MongoDB')) {
+        deps["mongoose"] = "^8.1.0";
+    } else if (hasDatabase(techStack, 'MySQL')) {
+        deps["mysql2"] = "^3.7.0";
+        deps["@prisma/client"] = "^5.8.0";
+        devDeps["prisma"] = "^5.8.0";
     }
 
+    // Add Redis if mentioned in infrastructure or components
+    if (techStack?.infrastructure?.some(i => i.toLowerCase().includes('redis')) ||
+        design.components?.some(c => c.name.toLowerCase().includes('cache'))) {
+        deps["ioredis"] = "^5.3.2";
+    }
+
+    // Generate description from requirements
+    const description = design.requirements?.functional?.[0] ||
+        `${design.architecture.pattern} application generated by ArchLab`;
+
     return JSON.stringify({
-        name: "generated-project",
+        name: projectName.toLowerCase().replace(/\s+/g, '-'),
         version: "1.0.0",
-        description: "AI-generated boilerplate from ArchLab",
-        main: "src/index.ts",
+        description: description,
+        main: "dist/index.js",
         scripts: {
             "start": "node dist/index.js",
-            "dev": "nodemon src/index.ts",
-            "build": "tsc"
+            "dev": "tsx watch src/index.ts",
+            "build": "tsc",
+            "db:generate": hasDatabase(techStack, 'PostgreSQL') || hasDatabase(techStack, 'MySQL')
+                ? "prisma generate" : "echo 'No Prisma setup'",
+            "db:push": hasDatabase(techStack, 'PostgreSQL') || hasDatabase(techStack, 'MySQL')
+                ? "prisma db push" : "echo 'No Prisma setup'",
+            "db:migrate": hasDatabase(techStack, 'PostgreSQL') || hasDatabase(techStack, 'MySQL')
+                ? "prisma migrate dev" : "echo 'No Prisma setup'"
         },
         dependencies: deps,
         devDependencies: devDeps
@@ -85,100 +139,202 @@ function generatePackageJson(design: Design): string {
 }
 
 function generateGitIgnore(): string {
-    return `node_modules
-dist
+    return `# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+
+# Environment
 .env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
 .DS_Store
-coverage
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Testing
+coverage/
+
+# Prisma
+prisma/*.db
+prisma/*.db-journal
 `;
 }
 
-function generateReadme(design: Design): string {
-    return `# ${design.architecture.pattern} System
+function generateEnvExample(design: Design): string {
+    const lines = [
+        '# Server',
+        'PORT=3000',
+        'NODE_ENV=development',
+        ''
+    ];
 
-Generated by ArchLab AI.
+    if (hasDatabase(design.techStack, 'PostgreSQL')) {
+        lines.push('# Database');
+        lines.push('DATABASE_URL="postgresql://admin:password@localhost:5432/app_db?schema=public"');
+        lines.push('');
+    } else if (hasDatabase(design.techStack, 'MongoDB')) {
+        lines.push('# Database');
+        lines.push('MONGODB_URI="mongodb://localhost:27017/app_db"');
+        lines.push('');
+    }
 
-## Architecture
-${design.architecture.pattern} pattern selected.
+    if (design.techStack?.infrastructure?.some(i => i.toLowerCase().includes('redis')) ||
+        design.components?.some(c => c.name.toLowerCase().includes('cache'))) {
+        lines.push('# Redis');
+        lines.push('REDIS_URL="redis://localhost:6379"');
+        lines.push('');
+    }
 
-### Tech Stack
-- Frontend: ${design.techStack?.frontend || 'Not specified'}
-- Backend: ${design.techStack?.backend || 'Not specified'}
-- Database: ${design.techStack?.database || 'Not specified'}
+    return lines.join('\n');
+}
 
-## Getting Started
+function generateReadme(design: Design, projectName: string): string {
+    const techList = [];
+    if (design.techStack?.frontend && design.techStack.frontend !== 'None') {
+        techList.push(`- **Frontend**: ${design.techStack.frontend}`);
+    }
+    if (design.techStack?.backend && design.techStack.backend !== 'None') {
+        techList.push(`- **Backend**: ${design.techStack.backend}`);
+    }
+    if (design.techStack?.database && design.techStack.database !== 'None') {
+        techList.push(`- **Database**: ${design.techStack.database}`);
+    }
+    if (design.techStack?.infrastructure?.length) {
+        techList.push(`- **Infrastructure**: ${design.techStack.infrastructure.join(', ')}`);
+    }
 
-1. Install dependencies:
-   \`\`\`bash
-   npm install
-   \`\`\`
+    return `# ${projectName}
 
-2. Start database (Docker):
-   \`\`\`bash
-   docker-compose up -d
-   \`\`\`
+> ${design.architecture.pattern} Architecture
 
-3. Run development server:
-   \`\`\`bash
-   npm run dev
-   \`\`\`
+${design.requirements?.functional?.[0] || 'Generated by ArchLab AI.'}
+
+## Tech Stack
+
+${techList.length > 0 ? techList.join('\n') : '- Node.js + Express\n- TypeScript'}
+
+## Quick Start
+
+\`\`\`bash
+# Install dependencies
+npm install
+
+# Set up environment
+cp .env.example .env
+
+# Start database (requires Docker)
+docker-compose up -d
+
+${hasDatabase(design.techStack, 'PostgreSQL') ? `# Run database migrations
+npm run db:push
+
+` : ''}# Start development server
+npm run dev
+\`\`\`
+
+## API Endpoints
+
+${design.api?.map(e => `- \`${e.method} ${e.path}\` - ${e.purpose}`).join('\n') || 'See src/routes for available endpoints.'}
 
 ## Components
-${design.components.map(c => `- **${c.name}**: ${c.responsibilities.join(', ')}`).join('\n')}
+
+${design.components?.map(c => `### ${c.name}\n${c.responsibilities.map(r => `- ${r}`).join('\n')}`).join('\n\n') || 'See source code for component details.'}
+
+## Architecture Rationale
+
+${design.architecture.rationale?.join('\n- ') || 'See implementation for details.'}
 `;
 }
 
 function generateDockerCompose(design: Design): string {
-    const services: Record<string, any> = {};
+    const services: string[] = [];
+    const volumes: string[] = [];
 
-    if (design.techStack?.database === 'PostgreSQL') {
-        services['postgres'] = {
-            image: 'postgres:15',
-            environment: {
-                POSTGRES_USER: 'admin',
-                POSTGRES_PASSWORD: 'password',
-                POSTGRES_DB: 'app_db'
-            },
-            ports: ['5432:5432'],
-            volumes: ['postgres_data:/var/lib/postgresql/data']
-        };
-    } else if (design.techStack?.database === 'MongoDB') {
-        services['mongo'] = {
-            image: 'mongo:6',
-            ports: ['27017:27017'],
-            volumes: ['mongo_data:/data/db']
-        };
+    if (hasDatabase(design.techStack, 'PostgreSQL')) {
+        services.push(`  postgres:
+    image: postgres:16-alpine
+    container_name: ${deriveProjectName(design).replace(/-app$/, '')}_postgres
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: app_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d app_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5`);
+        volumes.push('  postgres_data:');
     }
 
-    if (design.techStack?.database === 'Redis' || design.components.some(c => c.name.toLowerCase().includes('cache'))) {
-        services['redis'] = {
-            image: 'redis:alpine',
-            ports: ['6379:6379']
-        };
+    if (hasDatabase(design.techStack, 'MongoDB')) {
+        services.push(`  mongo:
+    image: mongo:7
+    container_name: ${deriveProjectName(design).replace(/-app$/, '')}_mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db`);
+        volumes.push('  mongo_data:');
+    }
+
+    // Check for Redis in infrastructure or cache components
+    if (design.techStack?.infrastructure?.some(i => i.toLowerCase().includes('redis')) ||
+        design.components?.some(c => c.name.toLowerCase().includes('cache'))) {
+        services.push(`  redis:
+    image: redis:7-alpine
+    container_name: ${deriveProjectName(design).replace(/-app$/, '')}_redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data`);
+        volumes.push('  redis_data:');
+    }
+
+    if (services.length === 0) {
+        return `# No services configured
+# Add your services here
+version: '3.8'
+services: {}
+`;
     }
 
     return `version: '3.8'
+
 services:
-${Object.entries(services).map(([name, config]) => {
-        return `  ${name}:
-    image: ${config.image}
-    ${config.environment ? `environment:
-${Object.entries(config.environment).map(([k, v]) => `      ${k}: ${v}`).join('\n')}` : ''}
-    ports:
-${config.ports.map((p: string) => `      - "${p}"`).join('\n')}
-    ${config.volumes ? `volumes:
-${config.volumes.map((v: string) => `      - ${v}`).join('\n')}` : ''}`;
-    }).join('\n\n')}
+${services.join('\n\n')}
 
 volumes:
-  postgres_data:
-  mongo_data:
+${volumes.join('\n')}
 `;
 }
 
 function generatePrismaSchema(design: Design): string {
-    let schema = `datasource db {
-  provider = "postgresql"
+    const provider = hasDatabase(design.techStack, 'MySQL') ? 'mysql' : 'postgresql';
+
+    let schema = `// Prisma Schema
+// Generated by ArchLab
+
+datasource db {
+  provider = "${provider}"
   url      = env("DATABASE_URL")
 }
 
@@ -187,68 +343,248 @@ generator client {
 }
 `;
 
-    if (!design.dataModel) return schema;
+    if (!design.dataModel || design.dataModel.length === 0) {
+        schema += `
+// Add your models here
+// Example:
+// model User {
+//   id        String   @id @default(uuid())
+//   email     String   @unique
+//   name      String?
+//   createdAt DateTime @default(now())
+//   updatedAt DateTime @updatedAt
+// }
+`;
+        return schema;
+    }
 
     design.dataModel.forEach(model => {
-        schema += `\nmodel ${model.entity.replace(/\s+/g, '')} {\n`;
-        schema += `  id    String @id @default(uuid())\n`;
-        schema += `  createdAt DateTime @default(now())\n`;
-        schema += `  updatedAt DateTime @updatedAt\n`;
+        const modelName = model.entity.replace(/\s+/g, '');
+        schema += `\nmodel ${modelName} {\n`;
+        schema += `  id        String   @id @default(uuid())\n`;
 
         model.fields.forEach(field => {
-            // Basic type mapping
-            let type = 'String';
+            const fieldName = field.name.replace(/\s+/g, '');
+            let prismaType = 'String';
             const lowerType = field.type.toLowerCase();
-            if (lowerType.includes('int')) type = 'Int';
-            else if (lowerType.includes('bool')) type = 'Boolean';
-            else if (lowerType.includes('date')) type = 'DateTime';
-            else if (lowerType.includes('float') || lowerType.includes('decimal')) type = 'Float';
 
-            schema += `  ${field.name} ${type}\n`;
+            if (lowerType.includes('int') || lowerType.includes('number')) prismaType = 'Int';
+            else if (lowerType.includes('bool')) prismaType = 'Boolean';
+            else if (lowerType.includes('date') || lowerType.includes('time')) prismaType = 'DateTime';
+            else if (lowerType.includes('float') || lowerType.includes('decimal') || lowerType.includes('double')) prismaType = 'Float';
+            else if (lowerType.includes('json') || lowerType.includes('object')) prismaType = 'Json';
+
+            schema += `  ${fieldName.charAt(0).toLowerCase() + fieldName.slice(1)} ${prismaType}\n`;
         });
+
+        schema += `  createdAt DateTime @default(now())\n`;
+        schema += `  updatedAt DateTime @updatedAt\n`;
         schema += `}\n`;
     });
 
     return schema;
 }
 
+function generateMongooseConnection(): string {
+    return `import mongoose from 'mongoose';
+
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/app_db';
+
+export async function connectDB(): Promise<void> {
+  try {
+    await mongoose.connect(MONGODB_URI);
+    console.log('Connected to MongoDB');
+  } catch (error) {
+    console.error('MongoDB connection error:', error);
+    process.exit(1);
+  }
+}
+
+export default mongoose;
+`;
+}
+
+function generateMongooseModel(model: { entity: string; fields: { name: string; type: string }[] }): string {
+    const modelName = model.entity.replace(/\s+/g, '');
+    const schemaFields = model.fields.map(field => {
+        let mongoType = 'String';
+        const lowerType = field.type.toLowerCase();
+
+        if (lowerType.includes('int') || lowerType.includes('number')) mongoType = 'Number';
+        else if (lowerType.includes('bool')) mongoType = 'Boolean';
+        else if (lowerType.includes('date')) mongoType = 'Date';
+        else if (lowerType.includes('array')) mongoType = '[String]';
+        else if (lowerType.includes('object')) mongoType = 'Schema.Types.Mixed';
+
+        return `  ${field.name}: { type: ${mongoType}, required: true }`;
+    }).join(',\n');
+
+    return `import mongoose, { Schema, Document } from 'mongoose';
+
+export interface I${modelName} extends Document {
+${model.fields.map(f => `  ${f.name}: ${mapToTsType(f.type)};`).join('\n')}
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const ${modelName}Schema = new Schema<I${modelName}>({
+${schemaFields}
+}, {
+  timestamps: true
+});
+
+export const ${modelName} = mongoose.model<I${modelName}>('${modelName}', ${modelName}Schema);
+`;
+}
+
+function mapToTsType(type: string): string {
+    const lower = type.toLowerCase();
+    if (lower.includes('int') || lower.includes('number') || lower.includes('float')) return 'number';
+    if (lower.includes('bool')) return 'boolean';
+    if (lower.includes('date')) return 'Date';
+    if (lower.includes('array')) return 'string[]';
+    return 'string';
+}
+
 function generateEntrypoint(design: Design): string {
-    return `import express from 'express';
-import cors from 'cors';
+    const imports = [`import express from 'express';`, `import cors from 'cors';`, `import helmet from 'helmet';`];
+    const setup: string[] = [];
+
+    if (hasDatabase(design.techStack, 'MongoDB')) {
+        imports.push(`import { connectDB } from './db/mongoose';`);
+        setup.push('  await connectDB();');
+    }
+
+    return `${imports.join('\n')}
 import { router } from './routes';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Middleware
+app.use(helmet());
 app.use(cors());
 app.use(express.json());
 
-// API Routes
+// Routes
 app.use('/api', router);
 
 // Health check
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', service: '${design.architecture.pattern}' });
+  res.json({ 
+    status: 'ok', 
+    service: '${design.architecture.pattern}',
+    timestamp: new Date().toISOString()
+  });
 });
 
-app.listen(PORT, () => {
-  console.log(\`Server running on port \${PORT}\`);
-});
+async function start() {
+${setup.length > 0 ? setup.join('\n') : '  // Initialize services here'}
+  
+  app.listen(PORT, () => {
+    console.log(\`🚀 Server running on http://localhost:\${PORT}\`);
+  });
+}
+
+start().catch(console.error);
 `;
 }
 
-function generateExpressRoutes(design: Design): string {
-    let code = `import { Router } from 'express';\n\nexport const router = Router();\n\n`;
+function extractResources(api: Design['api']): string[] {
+    if (!api) return [];
+    const resources = new Set<string>();
+    api.forEach(endpoint => {
+        const match = endpoint.path.match(/^\/api\/(\w+)/);
+        if (match) {
+            resources.add(match[1]);
+        } else {
+            const parts = endpoint.path.split('/').filter(Boolean);
+            if (parts.length > 0) {
+                resources.add(parts[0]);
+            }
+        }
+    });
+    return Array.from(resources);
+}
 
-    design.api?.forEach(endpoint => {
-        const method = endpoint.method.toLowerCase(); // get, post, etc
+function generateExpressRoutes(design: Design): string {
+    const resources = extractResources(design.api);
+
+    let code = `import { Router } from 'express';
+`;
+
+    resources.forEach(r => {
+        code += `import ${r}Routes from './${r}.routes';\n`;
+    });
+
+    code += `
+export const router = Router();
+
+`;
+
+    resources.forEach(r => {
+        code += `router.use('/${r}', ${r}Routes);\n`;
+    });
+
+    if (resources.length === 0) {
+        code += `// Add your routes here
+router.get('/', (req, res) => {
+  res.json({ message: 'API is running' });
+});
+`;
+    }
+
+    return code;
+}
+
+function generateResourceRoutes(resource: string, endpoints: Design['api']): string {
+    let code = `import { Router } from 'express';
+
+const router = Router();
+
+`;
+
+    endpoints.forEach(endpoint => {
+        const method = endpoint.method.toLowerCase();
+        // Extract path without the resource prefix
+        const path = endpoint.path.replace(`/api/${resource}`, '').replace(`/${resource}`, '') || '/';
+
         if (['get', 'post', 'put', 'delete', 'patch'].includes(method)) {
             code += `// ${endpoint.purpose}\n`;
-            code += `router.${method}('${endpoint.path}', (req, res) => {\n`;
-            code += `  res.json({ message: '${endpoint.purpose} implemented' });\n`;
+            code += `router.${method}('${path}', async (req, res) => {\n`;
+            code += `  try {\n`;
+            code += `    // TODO: Implement ${endpoint.purpose}\n`;
+            code += `    res.json({ message: '${endpoint.purpose}' });\n`;
+            code += `  } catch (error) {\n`;
+            code += `    res.status(500).json({ error: 'Internal server error' });\n`;
+            code += `  }\n`;
             code += `});\n\n`;
         }
     });
 
+    code += `export default router;\n`;
     return code;
+}
+
+function generateTsConfig(): string {
+    return JSON.stringify({
+        compilerOptions: {
+            target: "ES2022",
+            module: "NodeNext",
+            moduleResolution: "NodeNext",
+            lib: ["ES2022"],
+            outDir: "./dist",
+            rootDir: "./src",
+            strict: true,
+            esModuleInterop: true,
+            skipLibCheck: true,
+            forceConsistentCasingInFileNames: true,
+            resolveJsonModule: true,
+            declaration: true,
+            declarationMap: true,
+            sourceMap: true
+        },
+        include: ["src/**/*"],
+        exclude: ["node_modules", "dist"]
+    }, null, 2);
 }

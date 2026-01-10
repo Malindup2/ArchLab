@@ -105,6 +105,23 @@ NOW GENERATE THE JSON:`;
         parsed.architecture.rationale = stringifyItems(parsed.architecture.rationale);
       }
     }
+
+    // HELPER: Normalize techStack if AI returns array instead of object
+    if (Array.isArray(parsed.techStack)) {
+      parsed.techStack = {
+        frontend: 'None',
+        backend: 'None',
+        database: 'None',
+        infrastructure: parsed.techStack.filter((t: string) => typeof t === 'string')
+      };
+    } else if (!parsed.techStack || typeof parsed.techStack !== 'object') {
+      parsed.techStack = {
+        frontend: 'None',
+        backend: 'None',
+        database: 'None',
+        infrastructure: []
+      };
+    }
     // Note: Mermaid strip helper removed as we now expect JSON objects for diagrams
   } catch (err) {
     console.error("Raw Gemini response:", rawText);
@@ -185,6 +202,25 @@ NOW RETURN THE UPDATED JSON:`;
       if (parsed.architecture.rationale) {
         parsed.architecture.rationale = stringifyItems(parsed.architecture.rationale);
       }
+    }
+
+    // HELPER: Normalize techStack if AI returns array instead of object
+    if (Array.isArray(parsed.techStack)) {
+      // Convert array like ["Next.js", "Node.js"] to default object
+      parsed.techStack = {
+        frontend: 'None',
+        backend: 'None',
+        database: 'None',
+        infrastructure: parsed.techStack.filter((t: string) => typeof t === 'string')
+      };
+    } else if (!parsed.techStack || typeof parsed.techStack !== 'object') {
+      // Provide default if missing
+      parsed.techStack = {
+        frontend: 'None',
+        backend: 'None',
+        database: 'None',
+        infrastructure: []
+      };
     }
   } catch (err) {
     console.error("Raw Gemini response:", rawText);
