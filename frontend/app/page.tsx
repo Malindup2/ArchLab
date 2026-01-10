@@ -21,6 +21,7 @@ export default function Home() {
   // State
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [versions, setVersions] = useState<ProjectVersion[]>([]);
   const [currentVersion, setCurrentVersion] = useState<ProjectVersion | null>(null);
   const [design, setDesign] = useState<Design | null>(null);
 
@@ -67,18 +68,20 @@ export default function Home() {
     setSelectedProject(project);
     setShowProjectSelector(false);
 
-    // Try to load latest version's design
+    // Try to load versions
     try {
-      const versions = await api.getVersions(project.id);
-      if (versions.length > 0) {
-        const latestVersion = versions[0];
+      const versionsData = await api.getVersions(project.id);
+      setVersions(versionsData); // Store all versions
+
+      if (versionsData.length > 0) {
+        // Default to latest
+        const latestVersion = versionsData[0];
         setCurrentVersion(latestVersion);
 
         try {
           const designData = await api.getDesign(project.id, latestVersion.id);
           setDesign(designData.design);
         } catch {
-          // No design yet
           setDesign(null);
         }
       } else {
@@ -87,6 +90,25 @@ export default function Home() {
       }
     } catch (err) {
       console.error('Failed to load versions:', err);
+    }
+  };
+
+  const handleVersionSelect = async (version: ProjectVersion) => {
+    if (!selectedProject) return;
+
+    // Optimistic update
+    setCurrentVersion(version);
+    setIsLoading(true);
+
+    try {
+      const designData = await api.getDesign(selectedProject.id, version.id);
+      setDesign(designData.design);
+    } catch (err) {
+      console.error('Failed to load design for version:', err);
+      setError('Failed to load design for this version');
+      setDesign(null);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -125,6 +147,16 @@ export default function Home() {
           currentVersion.id,
           requirements //refinement request
         );
+
+        // Refresh versions list to include the new one (if refinement creates new version)
+        // Note: Backend refine creates new version? Wait, my refine implementation in backend UPDATED the version. 
+        // Actually, refineDesign in backend: `updated = await prisma.projectVersion.update(...)`
+        // So no new version is created in the DB, it updates the CURRENT version. 
+        // Wait, versioning strategy should be iterative?
+        // IF refinement updates in place, then we just reload.
+        // IF we want history, we should create new version.
+        // For now, let's assume in-place update as per previous implementation task.
+
         const designData = await api.getDesign(selectedProject.id, updatedVersion.id);
         setDesign(designData.design);
         // Stay on current view after refinement
@@ -133,6 +165,10 @@ export default function Home() {
         const version = await api.createVersion(selectedProject.id, requirements);
         const updatedVersion = await api.generateDesign(selectedProject.id, version.id);
         const designData = await api.getDesign(selectedProject.id, version.id);
+
+        // Update versions list
+        const newVersions = await api.getVersions(selectedProject.id);
+        setVersions(newVersions);
 
         setCurrentVersion(updatedVersion);
         setDesign(designData.design);
@@ -193,6 +229,11 @@ export default function Home() {
       <Header
         projectName={selectedProject?.name}
         versionNumber={currentVersion?.versionNumber || 1}
+        versions={versions}
+        onVersionSelect={handleVersionSelect}
+        onExportJson={handleExportJson}
+        onExportMarkdown={handleExportMarkdown}
+        onShare={() => { }}
       />
 
       <Sidebar
