@@ -3,7 +3,8 @@ import { Prisma } from "@prisma/client";
 import { asyncHandler } from "../../common/asyncHandler";
 import { HttpError } from "../../common/httpError";
 import { z } from "zod";
-import { runDesignPipeline } from "../ai/orchestrator";
+import { runDesignPipeline, runRefinementPipeline } from "../ai/orchestrator";
+import { Design } from "../ai/schemas";
 
 const CreateVersionSchema = z.object({
   requirementsText: z.string().min(10),
@@ -160,4 +161,47 @@ export const getDiagrams = asyncHandler(async (req, res) => {
     diagrams: design.diagrams ?? {},
   });
 });
+
+const RefineSchema = z.object({
+  refinementRequest: z.string().min(5, "Refinement request must be at least 5 characters"),
+  constraints: z
+    .object({
+      budget: z.string().optional(),
+      teamSize: z.number().int().positive().optional(),
+      cloud: z.string().optional(),
+    })
+    .optional(),
+});
+
+/**
+ * POST /projects/:projectId/versions/:versionId/refine
+ * Refines an existing design based on user's request
+ */
+export const refineDesign = asyncHandler(async (req, res) => {
+  const { projectId, versionId } = req.params;
+
+  const version = await prisma.projectVersion.findFirst({
+    where: { id: versionId, projectId },
+  });
+
+  if (!version) throw new HttpError(404, "Version not found");
+  if (!version.designJson) throw new HttpError(400, "No existing design to refine. Please generate a design first.");
+
+  const parsed = RefineSchema.safeParse(req.body);
+  if (!parsed.success) throw new HttpError(400, "Invalid body", parsed.error.flatten());
+
+  const updatedDesign = await runRefinementPipeline({
+    existingDesign: version.designJson as Design,
+    refinementRequest: parsed.data.refinementRequest,
+    constraints: parsed.data.constraints,
+  });
+
+  const updated = await prisma.projectVersion.update({
+    where: { id: version.id },
+    data: { designJson: updatedDesign },
+  });
+
+  res.json(updated);
+});
+
 

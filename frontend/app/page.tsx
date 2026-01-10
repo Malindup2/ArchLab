@@ -118,16 +118,28 @@ export default function Home() {
       setIsGenerating(true);
       setError(null);
 
-      // Create version and generate
-      const version = await api.createVersion(selectedProject.id, requirements);
-      const updatedVersion = await api.generateDesign(selectedProject.id, version.id);
-      const designData = await api.getDesign(selectedProject.id, version.id);
+      // REFINEMENT MODE: If design already exists, refine it
+      if (design && currentVersion) {
+        const updatedVersion = await api.refineDesign(
+          selectedProject.id,
+          currentVersion.id,
+          requirements //refinement request
+        );
+        const designData = await api.getDesign(selectedProject.id, updatedVersion.id);
+        setDesign(designData.design);
+        // Stay on current view after refinement
+      } else {
+        // INITIAL GENERATION: Create version and generate from scratch
+        const version = await api.createVersion(selectedProject.id, requirements);
+        const updatedVersion = await api.generateDesign(selectedProject.id, version.id);
+        const designData = await api.getDesign(selectedProject.id, version.id);
 
-      setCurrentVersion(updatedVersion);
-      setDesign(designData.design);
+        setCurrentVersion(updatedVersion);
+        setDesign(designData.design);
 
-      // Navigate to diagrams or overview after generation
-      setActiveView('c4Context');
+        // Navigate to diagrams after initial generation
+        setActiveView('c4Context');
+      }
     } catch (err: any) {
       let msg = err.message || 'Failed to generate design';
       // Nicer error for quota limits

@@ -115,3 +115,83 @@ NOW GENERATE THE JSON:`;
 
   return validated.data;
 }
+
+/**
+ * Refines an existing design based on a user's request.
+ * Preserves existing structure while applying targeted changes.
+ */
+export async function runRefinementPipeline(input: {
+  existingDesign: Design;
+  refinementRequest: string;
+  constraints?: Record<string, any>;
+}): Promise<Design> {
+  const prompt = `You are a senior software architect. You have an EXISTING system design that needs to be REFINED.
+
+CRITICAL RULES:
+1. Return ONLY valid JSON - no markdown, no explanations.
+2. PRESERVE all parts of the existing design that are NOT affected by the refinement request.
+3. APPLY the user's requested changes intelligently - update relevant components, data models, APIs, and diagrams.
+4. Keep the same JSON structure as the input design.
+5. FOR DIAGRAMS (React Flow Structure):
+   - Return "nodes" and "edges" arrays for each diagram.
+   - Nodes must have: { id: "string", type: "default" | "table", label: "string", details?: string[] }
+   - Edges must have: { id: "string", source: "nodeId", target: "nodeId", label?: "string" }
+
+EXISTING DESIGN:
+${JSON.stringify(input.existingDesign, null, 2)}
+
+USER REFINEMENT REQUEST:
+"${input.refinementRequest}"
+
+${input.constraints ? `ADDITIONAL CONSTRAINTS:\n${JSON.stringify(input.constraints)}` : ''}
+
+INSTRUCTIONS:
+1. Carefully analyze what the user wants to change
+2. Apply the changes to the relevant sections (architecture, components, dataModel, api, diagrams)
+3. Update diagrams to reflect any architectural changes
+4. Add new components/entities/endpoints as needed
+5. Keep all unaffected parts exactly as they are
+6. Return the COMPLETE updated design
+
+NOW RETURN THE UPDATED JSON:`;
+
+  const result = await geminiModel.generateContent(prompt);
+  const rawText = result.response.text();
+
+  // Clean and extract JSON
+  const cleanedText = extractJson(rawText);
+
+  let parsed: any;
+  try {
+    parsed = JSON.parse(cleanedText);
+
+    // HELPER: Auto-fix array of objects -> array of strings for strict schema fields
+    const stringifyItems = (items: any[]) => {
+      if (!Array.isArray(items)) return items;
+      return items.map(item => (typeof item === 'object' ? JSON.stringify(item) : String(item)));
+    };
+
+    if (parsed.architecture) {
+      if (parsed.architecture.risks) {
+        parsed.architecture.risks = stringifyItems(parsed.architecture.risks);
+      }
+      if (parsed.architecture.rationale) {
+        parsed.architecture.rationale = stringifyItems(parsed.architecture.rationale);
+      }
+    }
+  } catch (err) {
+    console.error("Raw Gemini response:", rawText);
+    console.error("Cleaned text:", cleanedText);
+    throw new Error(`Gemini returned invalid JSON during refinement: ${(err as Error).message}`);
+  }
+
+  // Validate with Zod schema
+  const validated = DesignSchema.safeParse(parsed);
+  if (!validated.success) {
+    console.error("Zod validation failed:", validated.error.flatten());
+    throw new Error(`Refinement validation failed: ${validated.error.message}`);
+  }
+
+  return validated.data;
+}
+
