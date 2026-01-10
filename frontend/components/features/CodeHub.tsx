@@ -19,17 +19,24 @@ interface TreeNode {
 export function CodeHub({ projectId, versionId }: CodeHubProps) {
     const [files, setFiles] = useState<Record<string, string>>({});
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const [selectedFile, setSelectedFile] = useState<string | null>(null);
     const [tree, setTree] = useState<TreeNode[]>([]);
     const [copying, setCopying] = useState(false);
 
     useEffect(() => {
-        loadCode();
+        if (projectId && versionId) {
+            loadCode();
+        } else {
+            setError('No project or version selected');
+            setLoading(false);
+        }
     }, [projectId, versionId]);
 
     const loadCode = async () => {
         try {
             setLoading(true);
+            setError(null);
             const data = await api.getCode(projectId, versionId);
             setFiles(data);
 
@@ -79,8 +86,13 @@ export function CodeHub({ projectId, versionId }: CodeHubProps) {
             const firstFile = Object.keys(data)[0];
             if (firstFile) setSelectedFile(firstFile);
 
-        } catch (err) {
+        } catch (err: any) {
             console.error('Failed to load code:', err);
+            if (err.message?.includes('not found') || err.message?.includes('not generated')) {
+                setError('Generate a design first to see the boilerplate code.');
+            } else {
+                setError(err.message || 'Failed to load code');
+            }
         } finally {
             setLoading(false);
         }
@@ -123,8 +135,8 @@ export function CodeHub({ projectId, versionId }: CodeHubProps) {
         return (
             <div
                 className={`flex items-center gap-2 py-1 px-2 cursor-pointer text-sm transition-colors ${isSelected
-                        ? 'bg-[var(--accent)] text-white'
-                        : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+                    ? 'bg-[var(--accent)] text-white'
+                    : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
                     }`}
                 style={{ paddingLeft: `${level * 12 + 8}px` }}
                 onClick={() => setSelectedFile(node.path)}
@@ -140,6 +152,16 @@ export function CodeHub({ projectId, versionId }: CodeHubProps) {
             <div className="flex flex-col items-center justify-center h-full text-[var(--text-tertiary)]">
                 <Loader2 size={32} className="animate-spin mb-4" />
                 <p>Generating boilerplate code...</p>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="flex flex-col items-center justify-center h-full text-[var(--text-tertiary)] p-8">
+                <File size={48} className="mb-4 opacity-50" />
+                <p className="text-lg font-medium text-[var(--text-secondary)] mb-2">No Code Available</p>
+                <p className="text-center max-w-md">{error}</p>
             </div>
         );
     }
