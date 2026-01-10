@@ -6,6 +6,7 @@ import { HttpError } from "./common/httpError";
 import healthRoutes from "./modules/health/health.routes";
 import projectsRoutes from "./modules/projects/projects.routes";
 import versionsRoutes from "./modules/versions/versions.routes";
+import templatesRoutes from "./modules/templates/templates.routes";
 
 dotenv.config();
 
@@ -17,6 +18,7 @@ app.use(express.json({ limit: "2mb" }));
 app.use("/health", healthRoutes);
 app.use("/projects", projectsRoutes);
 app.use("/projects", versionsRoutes);
+app.use("/templates", templatesRoutes);
 
 
 app.use((req, res) => res.status(404).json({ message: "Not Found" }));

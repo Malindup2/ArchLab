@@ -133,6 +133,26 @@ class ApiClient {
     }> {
         return this.request(`/projects/${projectId}/versions/${versionId}/diagrams`);
     }
+
+    // Templates
+    async getTemplates(): Promise<ArchitectureTemplate[]> {
+        return this.request<ArchitectureTemplate[]>('/templates');
+    }
+
+    async getTemplate(templateId: string): Promise<ArchitectureTemplate> {
+        return this.request<ArchitectureTemplate>(`/templates/${templateId}`);
+    }
+}
+
+export interface ArchitectureTemplate {
+    id: string;
+    name: string;
+    icon: string;
+    category: 'web' | 'mobile' | 'enterprise' | 'realtime';
+    description: string;
+    techStack: string[];
+    requirements: string;
+    constraints: Record<string, unknown>;
 }
 
 export const api = new ApiClient();

@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { Sidebar, Header } from '@/components/layout';
-import { ChatInput, InteractiveDiagram, OverviewTab, ComponentsTab, DataModelTab, ApiTab, DocumentationTab } from '@/components/features';
+import { ChatInput, InteractiveDiagram, OverviewTab, ComponentsTab, DataModelTab, ApiTab, DocumentationTab, TemplateSelector, Template } from '@/components/features';
 import { generateMarkdown } from '@/lib/markdown-generator';
 import { Button, Modal, Input } from '@/components/ui';
-import { api, Project, ProjectVersion, Design } from '@/lib/api';
+import { api, Project, ProjectVersion, Design, ArchitectureTemplate } from '@/lib/api';
 import { Network, Box, Database, FileCode, Loader2, Plus, FolderOpen, Layers, FileText, GitBranch } from 'lucide-react';
 
 type ViewType = 'overview' | 'components' | 'dataModel' | 'api' | 'docs' | 'versions' | 'diagrams' | 'c4Context' | 'c4Container' | 'erd' | 'sequence';
@@ -33,11 +33,22 @@ export default function Home() {
   const [showProjectSelector, setShowProjectSelector] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [templates, setTemplates] = useState<ArchitectureTemplate[]>([]);
 
-  // Load projects on mount
+  // Load projects and templates on mount
   useEffect(() => {
     loadProjects();
+    loadTemplates();
   }, []);
+
+  const loadTemplates = async () => {
+    try {
+      const data = await api.getTemplates();
+      setTemplates(data);
+    } catch (err) {
+      console.error('Failed to load templates:', err);
+    }
+  };
 
   const loadProjects = async () => {
     try {
@@ -220,12 +231,13 @@ export default function Home() {
               </div>
             </div>
           ) : !design && !isGenerating ? (
-            <div className="h-full flex flex-col items-center justify-center text-center opacity-60">
-              <Layers size={48} className="text-[var(--text-tertiary)] mb-4" />
-              <h3 className="text-lg font-semibold text-[var(--text-secondary)]">No Design Generated</h3>
-              <p className="text-[var(--text-muted)] max-w-sm mt-2">
-                Use the chat input below to describe your system and generate your first architecture design.
-              </p>
+            <div className="h-full flex flex-col items-center justify-start pt-8 overflow-y-auto">
+              {/* Template Selector */}
+              <TemplateSelector
+                templates={templates as Template[]}
+                onSelect={(template) => handleGenerateDesign(template.requirements)}
+                isLoading={isGenerating}
+              />
               {error && (
                 <div className="mt-4 p-3 bg-[var(--error-muted)] border border-[var(--error)] rounded-[var(--radius-md)] text-[var(--error)] text-sm max-w-md">
                   {error}
