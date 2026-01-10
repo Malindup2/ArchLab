@@ -133,6 +133,42 @@ class ApiClient {
     }> {
         return this.request(`/projects/${projectId}/versions/${versionId}/diagrams`);
     }
+
+    // Templates
+    async getTemplates(): Promise<ArchitectureTemplate[]> {
+        return this.request<ArchitectureTemplate[]>('/templates');
+    }
+
+    async getTemplate(templateId: string): Promise<ArchitectureTemplate> {
+        return this.request<ArchitectureTemplate>(`/templates/${templateId}`);
+    }
+
+    // Refinement
+    async refineDesign(
+        projectId: string,
+        versionId: string,
+        refinementRequest: string,
+        constraints?: Record<string, unknown>
+    ): Promise<ProjectVersion> {
+        return this.request<ProjectVersion>(
+            `/projects/${projectId}/versions/${versionId}/refine`,
+            {
+                method: 'POST',
+                body: JSON.stringify({ refinementRequest, constraints }),
+            }
+        );
+    }
+}
+
+export interface ArchitectureTemplate {
+    id: string;
+    name: string;
+    icon: string;
+    category: 'web' | 'mobile' | 'enterprise' | 'realtime';
+    description: string;
+    techStack: string[];
+    requirements: string;
+    constraints: Record<string, unknown>;
 }
 
 export const api = new ApiClient();

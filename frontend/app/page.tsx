@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { Sidebar, Header } from '@/components/layout';
-import { ChatInput, InteractiveDiagram, OverviewTab, ComponentsTab, DataModelTab, ApiTab, DocumentationTab } from '@/components/features';
+import { ChatInput, InteractiveDiagram, OverviewTab, ComponentsTab, DataModelTab, ApiTab, DocumentationTab, TemplateSelector, Template } from '@/components/features';
 import { generateMarkdown } from '@/lib/markdown-generator';
 import { Button, Modal, Input } from '@/components/ui';
-import { api, Project, ProjectVersion, Design } from '@/lib/api';
+import { api, Project, ProjectVersion, Design, ArchitectureTemplate } from '@/lib/api';
 import { Network, Box, Database, FileCode, Loader2, Plus, FolderOpen, Layers, FileText, GitBranch } from 'lucide-react';
 
 type ViewType = 'overview' | 'components' | 'dataModel' | 'api' | 'docs' | 'versions' | 'diagrams' | 'c4Context' | 'c4Container' | 'erd' | 'sequence';
@@ -21,6 +21,7 @@ export default function Home() {
   // State
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [versions, setVersions] = useState<ProjectVersion[]>([]);
   const [currentVersion, setCurrentVersion] = useState<ProjectVersion | null>(null);
   const [design, setDesign] = useState<Design | null>(null);
 
@@ -33,11 +34,22 @@ export default function Home() {
   const [showProjectSelector, setShowProjectSelector] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [templates, setTemplates] = useState<ArchitectureTemplate[]>([]);
 
-  // Load projects on mount
+  // Load projects and templates on mount
   useEffect(() => {
     loadProjects();
+    loadTemplates();
   }, []);
+
+  const loadTemplates = async () => {
+    try {
+      const data = await api.getTemplates();
+      setTemplates(data);
+    } catch (err) {
+      console.error('Failed to load templates:', err);
+    }
+  };
 
   const loadProjects = async () => {
     try {
@@ -56,18 +68,20 @@ export default function Home() {
     setSelectedProject(project);
     setShowProjectSelector(false);
 
-    // Try to load latest version's design
+    // Try to load versions
     try {
-      const versions = await api.getVersions(project.id);
-      if (versions.length > 0) {
-        const latestVersion = versions[0];
+      const versionsData = await api.getVersions(project.id);
+      setVersions(versionsData); // Store all versions
+
+      if (versionsData.length > 0) {
+        // Default to latest
+        const latestVersion = versionsData[0];
         setCurrentVersion(latestVersion);
 
         try {
           const designData = await api.getDesign(project.id, latestVersion.id);
           setDesign(designData.design);
         } catch {
-          // No design yet
           setDesign(null);
         }
       } else {
@@ -76,6 +90,25 @@ export default function Home() {
       }
     } catch (err) {
       console.error('Failed to load versions:', err);
+    }
+  };
+
+  const handleVersionSelect = async (version: ProjectVersion) => {
+    if (!selectedProject) return;
+
+    // Optimistic update
+    setCurrentVersion(version);
+    setIsLoading(true);
+
+    try {
+      const designData = await api.getDesign(selectedProject.id, version.id);
+      setDesign(designData.design);
+    } catch (err) {
+      console.error('Failed to load design for version:', err);
+      setError('Failed to load design for this version');
+      setDesign(null);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -107,16 +140,42 @@ export default function Home() {
       setIsGenerating(true);
       setError(null);
 
-      // Create version and generate
-      const version = await api.createVersion(selectedProject.id, requirements);
-      const updatedVersion = await api.generateDesign(selectedProject.id, version.id);
-      const designData = await api.getDesign(selectedProject.id, version.id);
+      // REFINEMENT MODE: If design already exists, refine it
+      if (design && currentVersion) {
+        const updatedVersion = await api.refineDesign(
+          selectedProject.id,
+          currentVersion.id,
+          requirements //refinement request
+        );
 
-      setCurrentVersion(updatedVersion);
-      setDesign(designData.design);
+        // Refresh versions list to include the new one (if refinement creates new version)
+        // Note: Backend refine creates new version? Wait, my refine implementation in backend UPDATED the version. 
+        // Actually, refineDesign in backend: `updated = await prisma.projectVersion.update(...)`
+        // So no new version is created in the DB, it updates the CURRENT version. 
+        // Wait, versioning strategy should be iterative?
+        // IF refinement updates in place, then we just reload.
+        // IF we want history, we should create new version.
+        // For now, let's assume in-place update as per previous implementation task.
 
-      // Navigate to diagrams or overview after generation
-      setActiveView('c4Context');
+        const designData = await api.getDesign(selectedProject.id, updatedVersion.id);
+        setDesign(designData.design);
+        // Stay on current view after refinement
+      } else {
+        // INITIAL GENERATION: Create version and generate from scratch
+        const version = await api.createVersion(selectedProject.id, requirements);
+        const updatedVersion = await api.generateDesign(selectedProject.id, version.id);
+        const designData = await api.getDesign(selectedProject.id, version.id);
+
+        // Update versions list
+        const newVersions = await api.getVersions(selectedProject.id);
+        setVersions(newVersions);
+
+        setCurrentVersion(updatedVersion);
+        setDesign(designData.design);
+
+        // Navigate to diagrams after initial generation
+        setActiveView('c4Context');
+      }
     } catch (err: any) {
       let msg = err.message || 'Failed to generate design';
       // Nicer error for quota limits
@@ -170,6 +229,11 @@ export default function Home() {
       <Header
         projectName={selectedProject?.name}
         versionNumber={currentVersion?.versionNumber || 1}
+        versions={versions}
+        onVersionSelect={handleVersionSelect}
+        onExportJson={handleExportJson}
+        onExportMarkdown={handleExportMarkdown}
+        onShare={() => { }}
       />
 
       <Sidebar
@@ -220,12 +284,13 @@ export default function Home() {
               </div>
             </div>
           ) : !design && !isGenerating ? (
-            <div className="h-full flex flex-col items-center justify-center text-center opacity-60">
-              <Layers size={48} className="text-[var(--text-tertiary)] mb-4" />
-              <h3 className="text-lg font-semibold text-[var(--text-secondary)]">No Design Generated</h3>
-              <p className="text-[var(--text-muted)] max-w-sm mt-2">
-                Use the chat input below to describe your system and generate your first architecture design.
-              </p>
+            <div className="h-full flex flex-col items-center justify-start pt-8 overflow-y-auto">
+              {/* Template Selector */}
+              <TemplateSelector
+                templates={templates as Template[]}
+                onSelect={(template) => handleGenerateDesign(template.requirements)}
+                isLoading={isGenerating}
+              />
               {error && (
                 <div className="mt-4 p-3 bg-[var(--error-muted)] border border-[var(--error)] rounded-[var(--radius-md)] text-[var(--error)] text-sm max-w-md">
                   {error}
